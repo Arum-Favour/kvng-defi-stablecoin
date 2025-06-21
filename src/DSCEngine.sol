@@ -144,10 +144,11 @@ address[] private s_collateralTokens; // Array of collateral token addresses
 
     function mintDsc(uint256 amountDscToMint) external moreThanZero(amountDscToMint) nonReentrant {
         s_DscMinted[msg.sender] += amountDscToMint;
-        revertIfHealthFactorIsBroken(msg.sender);
+        _revertIfHealthFactorIsBroken(msg.sender);
         bool success = i_dsc.mint(msg.sender, amountDscToMint);
         if (!success) {
             revert DSCEngine__TransferFailed();
+    }
     }
 
     function burnDsc() external {}
@@ -175,7 +176,7 @@ address[] private s_collateralTokens; // Array of collateral token addresses
     }
 
 
-function _healthFactor(address user) internal private view returns (uint256) {
+function _healthFactor(address user) internal view returns (uint256) {
         // This function should calculate the health factor of the user
         // The health factor is the ratio of the value of collateral to the value of DSC minted
         // It should return a value greater than 1 if the user is healthy, and less than 1 if they are in danger of liquidation
