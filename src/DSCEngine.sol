@@ -58,16 +58,21 @@ contract DSCEngine is ReentrancyGuard {
     error DSCEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength();
     error DSCEngine__TokenNotAlowed();
     error DSCEngine__TransferFailed();
+    error DSCEngine__BreaksHealthFactor(uint256 healthFactor);
+    error DSCEngine__MintedFailed();
     /////////////////
     //State Variables
     /////////////////
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10; // Used to adjust the price feed values to a common precision
     uint256 private constant PRECISION = 1e18; // Used for price calculations
+    uint256 private constant LIQUIDATION_THRESHOLD = 50; // 200% overcollateralization means 50% liquidation threshold
+    uint256 private constant LIQUIDATION_PRECISION = 100; // 10% liquidation penalty
+    uint256 private constant MIN_HEALTH_FACTOR = 1; // Minimum health factor to avoid liquidation
 
     mapping(address token => address priceFeed) private s_priceFeeds; // Maps token addresses to their price feed addresses
     mapping(address user => mapping(address token => uint256 amount)) private s_collateralDeposited; // Maps user addresses to their collateral deposits
     mapping(address user => uint256 amountDscMinted) private s_DscMinted; // Maps user addresses to the amount of DSC they have minted
-address[] private s_collateralTokens; // Array of collateral token addresses
+    address[] private s_collateralTokens; // Array of collateral token addresses
 
     DecentralizedStableCoin private immutable i_dsc; // The Decentralized Stable Coin (DSC) contract
 
@@ -148,9 +153,9 @@ address[] private s_collateralTokens; // Array of collateral token addresses
     function mintDsc(uint256 amountDscToMint) external moreThanZero(amountDscToMint) nonReentrant {
         s_DscMinted[msg.sender] += amountDscToMint;
         _revertIfHealthFactorIsBroken(msg.sender);
-        bool success = i_dsc.mint(msg.sender, amountDscToMint);
-        if (!success) {
-            revert DSCEngine__TransferFailed();
+        bool minted = i_dsc.mint(msg.sender, amountDscToMint);
+        if (!minted) {
+            revert DSCEngine__MintedFailed();
     }
     }
 
@@ -184,17 +189,21 @@ function _healthFactor(address user) internal view returns (uint256) {
         // The health factor is the ratio of the value of collateral to the value of DSC minted
         // It should return a value greater than 1 if the user is healthy, and less than 1 if they are in danger of liquidation
         (uint256 totalDscMinted, uint256 collateralValueInUsd) = _getAccountInformation(user);
-        return 0; // Placeholder implementation
+        uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION; // Adjusting for liquidation threshold
+        return (collateralAdjustedForThreshold * PRECISION) / totalDscMinted ; // Adjusting for precision
     }
 
 
     function _revertIfHealthFactorIsBroken(address user) internal view {
-      
+      uint256 userHealthFactor = _healthFactor(user);
+        if (userHealthFactor < MIN_HEALTH_FACTOR) {
+            revert DSCEngine__BreaksHealthFactor(userHealthFactor);
+        }
     }
 
 
 
-        //////////////////////////////
+    //////////////////////////////
     //Public & External view Functions
     //////////////////////////////
     function getAccountCollateralValue(address user) public view returns (uint256 totalCollateralValueInUsd) {
