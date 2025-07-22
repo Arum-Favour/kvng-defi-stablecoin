@@ -60,8 +60,9 @@ contract DSCEngine is ReentrancyGuard {
     error DSCEngine__TransferFailed();
     error DSCEngine__BreaksHealthFactor(uint256 healthFactor);
     error DSCEngine__MintedFailed();
-    error DSCEngine__HealthFactorNotmproved();
+    error DSCEngine__HealthFactorNotImproved();
     error DSCEngine__HealthFactorOk();
+    error DSCEngine__BurnAmountExceedsMinted();
     /////////////////
     //State Variables
     /////////////////
@@ -93,6 +94,11 @@ contract DSCEngine is ReentrancyGuard {
         address indexed redeemedTo,
         address indexed token,
         uint256 amount
+    );
+    event DscBurned(
+        address indexed onBehalfOf,
+        address indexed dscFrom,
+        uint256 amountDscToBurn
     );
 
     /////////////////
@@ -269,12 +275,26 @@ contract DSCEngine is ReentrancyGuard {
 
             uint256 endingUserHealthFactor = _healthFactor(user);
             if(endingUserHealthFactor <= startingUserHealthFactor){
-                revert DSCEngine__HealthFactorNotmproved();
+                revert DSCEngine__HealthFactorNotImproved();
             }
             _revertIfHealthFactorIsBroken(msg.sender);
     }
 
-    function getHealthFactor() external view {}
+    function getHealthFactor(address user) external view returns (uint256) {
+        return _healthFactor(user);
+    }
+
+    function getAdditionalFeedPrecision() external pure returns (uint256) {
+        return ADDITIONAL_FEED_PRECISION;
+    }
+
+    function getLiquidationPrecision() external pure returns (uint256) {
+        return LIQUIDATION_PRECISION;
+    }
+
+    function getLiquidationBonus() external pure returns (uint256) {
+        return LIQUIDATION_BONUS;
+    }
 
     //////////////////////////////
     //Private & Internal view Functions
@@ -285,14 +305,28 @@ contract DSCEngine is ReentrancyGuard {
     /** @dev Low-level internal function, don't call unless the function calling it is
      * checking for health factors being broken
      */
-    function _burnDsc(uint256 amountDscToBurn, address onBehalfOf, address dscFrom) private{
-            s_DscMinted[onBehalfOf] -= amountDscToBurn;
-        bool success = i_dsc.transferFrom(dscFrom, address(this), amountDscToBurn);
-        if (!success) {
-            revert DSCEngine__TransferFailed();
-        }
-        i_dsc.burn(amountDscToBurn);
+
+
+
+  function _burnDsc(uint256 amountDscToBurn, address onBehalfOf, address dscFrom) private {
+    // Optional: Add a check for underflow
+    if (s_DscMinted[onBehalfOf] < amountDscToBurn) {
+        revert DSCEngine__BurnAmountExceedsMinted();
     }
+    s_DscMinted[onBehalfOf] -= amountDscToBurn;
+
+    // Transfer DSC from dscFrom to this contract
+    bool success = i_dsc.transferFrom(dscFrom, address(this), amountDscToBurn);
+    if (!success) {
+        revert DSCEngine__TransferFailed();
+    }
+
+    // Burn DSC from this contract's balance
+    i_dsc.burn(amountDscToBurn);
+
+    // Optional: emit event
+     emit DscBurned(onBehalfOf, dscFrom, amountDscToBurn);
+}
 
     function _redeemCollateral(
         address from,
@@ -369,6 +403,10 @@ contract DSCEngine is ReentrancyGuard {
             (uint256(price) * ADDITIONAL_FEED_PRECISION);
     }
 
+     function getCollateralBalanceOfUser(address user, address token) external view returns (uint256) {
+        return s_collateralDeposited[user][token];
+    }
+
     function getAccountCollateralValue(
         address user
     ) public view returns (uint256 totalCollateralValueInUsd) {
@@ -384,7 +422,7 @@ contract DSCEngine is ReentrancyGuard {
     }
 
     function getUsdValue(
-        address token,
+        address token, 
         uint256 amount
     ) public view returns (uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(
@@ -394,5 +432,29 @@ contract DSCEngine is ReentrancyGuard {
 
         return
             ((uint256(price) * ADDITIONAL_FEED_PRECISION) * amount) / PRECISION; // Adjusting for price feed precision
+    }
+
+
+       function _calculateHealthFactor(
+        uint256 totalDscMinted,
+        uint256 collateralValueInUsd
+    )
+        internal
+        pure
+        returns (uint256)
+    {
+        if (totalDscMinted == 0) return type(uint256).max;
+        uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
+        return (collateralAdjustedForThreshold * PRECISION) / totalDscMinted;
+    }
+
+    function getAccountInformation(address user) external view returns (
+        uint256 totalDscMinted,
+        uint256 collateralValueInUsd
+    ) {
+        (totalDscMinted, collateralValueInUsd) = _getAccountInformation(
+            user
+        );
+        
     }
 }
