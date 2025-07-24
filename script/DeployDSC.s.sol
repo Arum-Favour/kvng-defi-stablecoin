@@ -4,8 +4,8 @@ pragma solidity ^0.8.18;
 
 
 import {Script} from "forge-std/Script.sol";
-import {DecentralizedStableCoin} from "../../src/DecentralizedStableCoin.sol";
-import {DSCEngine} from "../../src/DSCEngine.sol";
+import {DecentralizedStableCoin} from "../src/DecentralizedStableCoin.sol";
+import {DSCEngine} from "../src/DSCEngine.sol";
 // Update the import path below if HelperConfig.s.sol is located elsewhere
 import {HelperConfig} from "../script/HelperConfig.s.sol";
 
