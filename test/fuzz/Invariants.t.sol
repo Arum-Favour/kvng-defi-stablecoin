@@ -41,6 +41,8 @@ contract Invariants is StdInvariant, Test {
         console.log("wethValue: ", wethValue);
         console.log("wbtcValue: ", wbtcValue);
         console.log("totalSupply: ", totalSupply);
+        console.log("timesMintIsCalled: ", handler.timesMintIsCalled());
+
 
         assert(wethValue + wbtcValue >= totalSupply);
 }

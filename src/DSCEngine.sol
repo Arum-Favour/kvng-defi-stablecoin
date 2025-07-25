@@ -49,6 +49,7 @@ import {DecentralizedStableCoin} from "./DecentralizedStableCoin.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {OracleLib} from "./libraries/OracleLib.sol";
 
 contract DSCEngine is ReentrancyGuard {
     /////////////////
@@ -63,6 +64,18 @@ contract DSCEngine is ReentrancyGuard {
     error DSCEngine__HealthFactorNotImproved();
     error DSCEngine__HealthFactorOk();
     error DSCEngine__BurnAmountExceedsMinted();
+
+
+
+
+     /////////////////
+    //Types
+    /////////////////
+   using OracleLib for AggregatorV3Interface;
+
+
+
+
     /////////////////
     //State Variables
     /////////////////
@@ -409,6 +422,10 @@ contract DSCEngine is ReentrancyGuard {
 
     function getCollateralTokens() external view returns (address[] memory) {
         return s_collateralTokens;
+    }
+
+     function getCollateralTokenPriceFeed(address token) external view returns (address) {
+        return s_priceFeeds[token];
     }
 
     function getAccountCollateralValue(
